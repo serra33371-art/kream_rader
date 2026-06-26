@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>KREAM RADAR</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root { --bg:#f5f5f5; --card:#fff; --border:#e8e8e8; --text:#111; --muted:#888; --radius:12px; --radius-sm:8px; }
+  body { font-family:-apple-system,BlinkMacSystemFont,'Pretendard','Segoe UI',sans-serif; background:var(--bg); color:var(--text); font-size:13px; line-height:1.5; min-height:100vh; }
+  .header { background:var(--card); border-bottom:1px solid var(--border); padding:16px 24px; display:flex; align-items:center; gap:12px; position:sticky; top:0; z-index:10; }
+  .logo { font-size:15px; font-weight:800; letter-spacing:-0.5px; }
+  .sub { font-size:11px; color:var(--muted); margin-top:1px; }
+  .header-right { margin-left:auto; display:flex; align-items:center; gap:8px; }
+  .refresh-btn { background:#111; color:#fff; border:none; border-radius:var(--radius-sm); padding:7px 14px; font-size:12px; font-weight:600; cursor:pointer; transition:opacity .15s; }
+  .refresh-btn:hover { opacity:.82; }
+  .filter-bar { padding:12px 24px; background:var(--card); border-bottom:1px solid var(--border); display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .filter-label { font-size:11px; color:var(--muted); font-weight:600; margin-right:2px; flex-shrink:0; }
+  .fbtn { padding:5px 12px; border-radius:20px; border:1px solid var(--border); background:var(--bg); color:var(--muted); font-size:12px; font-weight:500; cursor:pointer; transition:all .15s; white-space:nowrap; }
+  .fbtn.active { background:#111; color:#fff; border-color:#111; }
+  .fbtn.collab.active { background:#cc2200; border-color:#cc2200; }
+  .fbtn.limited.active { background:#b45309; border-color:#b45309; }
+  .fbtn.sneakers.active { background:#1d4ed8; border-color:#1d4ed8; }
+  .fbtn.fashion.active { background:#6d28d9; border-color:#6d28d9; }
+  .fbtn.kidult.active { background:#0f766e; border-color:#0f766e; }
+  .date-bar { padding:10px 24px; background:var(--card); border-bottom:1px solid var(--border); display:flex; gap:6px; flex-wrap:wrap; align-items:center; }
+  .dbtn { padding:5px 12px; border-radius:20px; border:1px solid var(--border); background:var(--bg); color:var(--muted); font-size:12px; font-weight:500; cursor:pointer; transition:all .15s; }
+  .dbtn.active { background:#0f766e; color:#fff; border-color:#0f766e; }
+  .date-input { padding:5px 10px; border-radius:20px; border:1px solid var(--border); background:var(--bg); color:var(--text); font-size:12px; outline:none; }
+  .date-input:focus { border-color:#0f766e; }
+  .main { max-width:1200px; margin:0 auto; padding:20px 24px; }
+  .status-bar { font-size:12px; color:var(--muted); margin-bottom:14px; display:flex; justify-content:space-between; align-items:center; }
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(320px,1fr)); gap:14px; }
+  .section-date { grid-column:1/-1; font-size:12px; font-weight:600; color:var(--muted); padding-bottom:8px; border-bottom:1px solid var(--border); margin-top:10px; display:flex; align-items:center; gap:8px; }
+  .count-badge { background:#f0f0f0; color:var(--text); font-size:10px; padding:1px 7px; border-radius:10px; font-weight:500; }
+  .card { background:var(--card); border:1px solid var(--border); border-radius:var(--radius); overflow:hidden; cursor:pointer; transition:border-color .15s,transform .1s; display:flex; flex-direction:column; }
+  .card:hover { border-color:#bbb; transform:translateY(-1px); }
+  .card-img { width:100%; height:160px; object-fit:cover; display:block; background:var(--bg); }
+  .card-img-placeholder { width:100%; height:160px; background:#f0f0f0; display:flex; align-items:center; justify-content:center; font-size:28px; color:#ccc; }
+  .card-body { padding:14px; display:flex; flex-direction:column; gap:8px; flex:1; }
+  .card-meta { display:flex; align-items:center; justify-content:space-between; }
+  .card-source { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.4px; max-width:60%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .card-date { font-size:10px; color:var(--muted); }
+  .card-title { font-size:14px; font-weight:600; line-height:1.45; letter-spacing:-0.2px; }
+  .card-desc { font-size:12px; color:var(--muted); line-height:1.6; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; flex:1; }
+  .card-tags { display:flex; gap:5px; flex-wrap:wrap; margin-top:2px; }
+  .tag { font-size:10px; padding:2px 8px; border-radius:20px; font-weight:500; }
+  .tag.collab { background:#fff0f0; color:#cc2200; }
+  .tag.limited { background:#fff8e6; color:#b45309; }
+  .tag.sneakers { background:#eff6ff; color:#1d4ed8; }
+  .tag.fashion { background:#f5f3ff; color:#6d28d9; }
+  .tag.kidult { background:#f0fdf4; color:#15803d; }
+  .empty { text-align:center; padding:4rem 1rem; color:var(--muted); grid-column:1/-1; }
+  .loading-wrap { text-align:center; padding:3rem; color:var(--muted); grid-column:1/-1; }
+  .spinner { display:inline-block; width:20px; height:20px; border:2px solid var(--border); border-top-color:#111; border-radius:50%; animation:spin .6s linear infinite; margin-bottom:10px; }
+  @keyframes spin { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="header">
+  <div>
+    <div class="logo">KREAM RADAR</div>
+    <div class="sub">한정판 · 콜라보 소식 실시간 모니터링</div>
+  </div>
+  <div class="header-right">
+    <span id="lastUpdate" style="font-size:11px;color:var(--muted);"></span>
+  </div>
+</div>
+<div class="filter-bar">
+  <span class="filter-label">카테고리</span>
+  <button class="fbtn active" data-filter="all">전체</button>
+  <button class="fbtn collab" data-filter="collab">콜라보</button>
+  <button class="fbtn limited" data-filter="limited">한정판</button>
+  <button class="fbtn sneakers" data-filter="sneakers">스니커즈</button>
+  <button class="fbtn fashion" data-filter="fashion">패션</button>
+  <button class="fbtn kidult" data-filter="kidult">키덜트</button>
+</div>
+<div class="date-bar">
+  <span class="filter-label">날짜</span>
+  <button class="dbtn active" data-days="all">전체</button>
+  <button class="dbtn" data-days="0">오늘</button>
+  <button class="dbtn" data-days="3">최근 3일</button>
+  <button class="dbtn" data-days="7">최근 7일</button>
+  <button class="dbtn" data-days="30">최근 30일</button>
+  <input type="date" class="date-input" id="dateFrom" />
+  <span style="font-size:11px;color:var(--muted);">~</span>
+  <input type="date" class="date-input" id="dateTo" />
+</div>
+<div class="main">
+  <div class="status-bar">
+    <span id="statusText">로딩 중...</span>
+  </div>
+  <div id="grid" class="grid"></div>
+</div>
+<script>
+let allItems = [];
+let activeFilter = 'all';
+let activeDateFilter = 'all';
+
+function timeAgo(dateStr) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const h = Math.floor(diff/3600000);
+  const d = Math.floor(h/24);
+  if (h < 1) return '방금 전';
+  if (h < 24) return h + '시간 전';
+  if (d < 7) return d + '일 전';
+  return new Date(dateStr).toLocaleDateString('ko-KR', {month:'short', day:'numeric'});
+}
+
+function dateKey(dateStr) {
+  const d = new Date(dateStr);
+  const today = new Date();
+  const yesterday = new Date(); yesterday.setDate(today.getDate()-1);
+  if (d.toDateString() === today.toDateString()) return '오늘';
+  if (d.toDateString() === yesterday.toDateString()) return '어제';
+  return d.toLocaleDateString('ko-KR', {year:'numeric', month:'long', day:'numeric'});
+}
+
+function getDateRange() {
+  const fromVal = document.getElementById('dateFrom').value;
+  const toVal = document.getElementById('dateTo').value;
+  if (fromVal || toVal) {
+    return { from: fromVal ? new Date(fromVal+'T00:00:00') : null, to: toVal ? new Date(toVal+'T23:59:59') : null };
+  }
+  if (activeDateFilter === 'all') return { from: null, to: null };
+  const now = new Date();
+  const days = parseInt(activeDateFilter);
+  if (days === 0) return { from: new Date(now.getFullYear(), now.getMonth(), now.getDate()), to: now };
+  return { from: new Date(now.getTime() - days*86400000), to: now };
+}
+
+function renderGrid() {
+  const grid = document.getElementById('grid');
+  const seen = new Set();
+  let filtered = allItems.filter(item => {
+    if (seen.has(item.id)) return false;
+    seen.add(item.id);
+    return true;
+  });
+  if (activeFilter !== 'all') filtered = filtered.filter(i => i.tags.includes(activeFilter));
+  const { from, to } = getDateRange();
+  if (from || to) {
+    filtered = filtered.filter(item => {
+      const d = new Date(item.date);
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+      return true;
+    });
+  }
+  document.getElementById('statusText').textContent = '총 ' + filtered.length + '개 소식';
+  if (!filtered.length) {
+    grid.innerHTML = '<div class="empty"><div style="font-size:32px;margin-bottom:10px;">🔍</div><div>해당하는 소식이 없어요</div></div>';
+    return;
+  }
+  const groups = {};
+  filtered.forEach(item => {
+    const k = dateKey(item.date);
+    if (!groups[k]) groups[k] = [];
+    groups[k].push(item);
+  });
+  const tagLabel = { collab:'콜라보', limited:'한정판', sneakers:'스니커즈', fashion:'패션', kidult:'키덜트' };
+  grid.innerHTML = Object.entries(groups).map(([date, items]) =>
+    '<div class="section-date">' + date + ' <span class="count-badge">' + items.length + '</span></div>' +
+    items.map(item =>
+      '<div class="card" onclick="window.open(\'' + item.link + '\',\'_blank\')">' +
+      (item.image ? '<img class="card-img" src="' + item.image + '" onerror="this.style.display=\'none\'" />' : '<div class="card-img-placeholder">📰</div>') +
+      '<div class="card-body">' +
+      '<div class="card-meta"><div class="card-source">' + item.source + '</div><div class="card-date">' + timeAgo(item.date) + '</div></div>' +
+      '<div class="card-title">' + item.title + '</div>' +
+      (item.desc ? '<div class="card-desc">' + item.desc + '</div>' : '') +
+      '<div class="card-tags">' + [...new Set(item.tags)].map(t => '<span class="tag ' + t + '">' + (tagLabel[t]||t) + '</span>').join('') + '</div>' +
+      '</div></div>'
+    ).join('')
+  ).join('');
+}
+
+async function loadData() {
+  try {
+    document.getElementById('grid').innerHTML = '<div class="loading-wrap"><div class="spinner"></div><div>데이터 불러오는 중...</div></div>';
+    const res = await fetch('data.json?t=' + Date.now());
+    if (!res.ok) throw new Error('data.json 없음');
+    const data = await res.json();
+    allItems = data.items || [];
+    allItems.sort((a,b) => new Date(b.date) - new Date(a.date));
+    const updated = data.updated ? new Date(data.updated).toLocaleString('ko-KR', {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'}) : '';
+    document.getElementById('lastUpdate').textContent = updated ? '업데이트: ' + updated : '';
+    renderGrid();
+  } catch(e) {
+    document.getElementById('grid').innerHTML = '<div class="empty"><div style="font-size:32px;margin-bottom:10px;">⚙️</div><div>아직 데이터가 없어요<br><small style="font-size:11px;">GitHub Actions가 처음 실행되면 자동으로 채워져요</small></div></div>';
+    document.getElementById('statusText').textContent = '데이터 준비 중...';
+  }
+}
+
+document.querySelectorAll('.fbtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.fbtn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeFilter = btn.dataset.filter;
+    renderGrid();
+  });
+});
+document.querySelectorAll('.dbtn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.dbtn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    activeDateFilter = btn.dataset.days;
+    document.getElementById('dateFrom').value = '';
+    document.getElementById('dateTo').value = '';
+    renderGrid();
+  });
+});
+document.getElementById('dateFrom').addEventListener('change', () => {
+  document.querySelectorAll('.dbtn').forEach(b => b.classList.remove('active'));
+  renderGrid();
+});
+document.getElementById('dateTo').addEventListener('change', () => {
+  document.querySelectorAll('.dbtn').forEach(b => b.classList.remove('active'));
+  renderGrid();
+});
+
+loadData();
+</script>
+</body>
+</html>
