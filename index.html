@@ -177,7 +177,7 @@ function renderGrid() {
 async function loadData() {
   try {
     document.getElementById('grid').innerHTML = '<div class="loading-wrap"><div class="spinner"></div><div>데이터 불러오는 중...</div></div>';
-    const res = await fetch('data.json?t=' + Date.now());
+    const res = await fetch('./data.json?t=' + Date.now());
     if (!res.ok) throw new Error('data.json 없음');
     const data = await res.json();
     allItems = data.items || [];
