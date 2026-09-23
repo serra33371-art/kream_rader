@@ -222,6 +222,9 @@ def iter_har(path, url_filter):
             text = base64.b64decode(text).decode('utf-8')
         params = dict(parse_qsl(urlsplit(req_url).query))
         label = params.get('date') or params.get('startDate') or ''
+        interval = params.get('interval')
+        if interval and interval != 'month':
+            label = f'{label} ({interval})'  # 일간/주간 조회분은 월간과 구분
         if label in seen:
             continue
         seen.add(label)
