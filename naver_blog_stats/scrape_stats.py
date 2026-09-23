@@ -118,7 +118,13 @@ def flatten(d, prefix=''):
     return out
 
 
-def daterange(start, end):
+def daterange(start, end, step='day'):
+    if step == 'month':
+        d = start.replace(day=1)
+        while d <= end:
+            yield d
+            d = (d + timedelta(days=32)).replace(day=1)
+        return
     d = start
     while d <= end:
         yield d
@@ -147,6 +153,8 @@ def main():
     p.add_argument('--end', help='종료일 YYYY-MM-DD (기본: 어제)')
     p.add_argument('--start-key', help='시작일 파라미터 이름 (예: startDate). 생략 시 자동 감지')
     p.add_argument('--end-key', help='종료일 파라미터 이름 (예: endDate)')
+    p.add_argument('--step', choices=['day', 'month'], default='day',
+                   help='day: 하루씩 / month: 매월 1일로 (조회수 순위 같은 월간 화면)')
     p.add_argument('--out', default='blog_stats.csv', help='저장할 CSV 경로')
     p.add_argument('--dump', action='store_true', help='원본 JSON 을 raw/ 폴더에 저장 (구조 확인용)')
     p.add_argument('--delay', type=float, default=1.0, help='요청 간 대기(초)')
@@ -164,7 +172,7 @@ def main():
         start = date.fromisoformat(args.start)
         end = date.fromisoformat(args.end) if args.end else date.today() - timedelta(days=1)
         targets = [(d.isoformat(), with_date(url, d, args.start_key, args.end_key))
-                   for d in daterange(start, end)]
+                   for d in daterange(start, end, args.step)]
     else:
         targets = [('', url)]
 

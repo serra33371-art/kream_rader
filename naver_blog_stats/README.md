@@ -34,6 +34,9 @@ python scrape_stats.py --start 2026-09-01 --end 2026-09-22
 
 # 날짜 파라미터 이름을 직접 지정
 python scrape_stats.py --start 2026-09-01 --end 2026-09-22 --start-key startDate --end-key endDate
+
+# 월간 화면(조회수 순위 등): 매월 1일 날짜로 한 달씩 호출
+python scrape_stats.py --start 2026-01-01 --end 2026-08-31 --step month --out cv_ranks.csv
 ```
 
 결과: `blog_stats.csv` (한글 안 깨지는 UTF-8 BOM). 구글 시트에서 **파일 → 가져오기** 하거나 그냥 복붙.
