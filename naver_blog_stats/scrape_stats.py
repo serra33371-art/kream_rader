@@ -118,6 +118,21 @@ def flatten(d, prefix=''):
     return out
 
 
+LINK_KEYS = ('url', 'link', 'contentUrl', 'postUrl')
+ID_KEYS = ('logNo', 'contentId', 'postId', 'documentId')
+
+
+def add_blog_link(row, channel_id):
+    """응답에 글 주소가 없으면 blogId + 글번호(logNo 등)로 링크를 만들어 넣는다."""
+    if not channel_id or any(row.get(k) for k in LINK_KEYS):
+        return row
+    for k in ID_KEYS:
+        for col, v in row.items():
+            if col.split('.')[-1] == k and str(v).isdigit():
+                return {**row, 'link': f'https://blog.naver.com/{channel_id}/{v}'}
+    return row
+
+
 def daterange(start, end, step='day'):
     if step == 'month':
         d = start.replace(day=1)
@@ -176,6 +191,7 @@ def main():
     else:
         targets = [('', url)]
 
+    channel_id = dict(parse_qsl(urlsplit(url).query)).get('channelId')
     all_rows = []
     for label, target in targets:
         resp = session.get(target, timeout=20)
@@ -196,6 +212,7 @@ def main():
 
         rows = [flatten(r) for r in find_rows(data)]
         for r in rows:
+            r = add_blog_link(r, channel_id)
             if label:
                 r = {'request_date': label, **r}
             all_rows.append(r)
