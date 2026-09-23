@@ -56,3 +56,19 @@ python scrape_stats.py --start 2026-09-01 --end 2026-09-22 --sheet-id <시트ID>
 ```
 
 지정한 탭을 비우고 새로 씁니다.
+
+## 4. 막히면: HAR 방식 (서명 헤더 문제 우회)
+
+`x-ca-sig` 같은 서명 헤더 때문에 날짜를 바꾼 요청이 거부되면(401/403), 브라우저가 실제로 보낸 응답을 파일로 저장해서 씁니다.
+
+1. Network 탭 → **Disable cache 체크** → Fetch/XHR 필터
+2. 화면에서 날짜 `<` 버튼으로 원하는 달을 전부 한 번씩 넘겨본다 (예: 2026.09 → 2025.09)
+3. Network 탭의 **다운로드(↓, Export HAR) 아이콘** → `naver.har` 로 저장
+4. 실행:
+
+```bash
+python scrape_stats.py --har naver.har --out cv_ranks.csv
+```
+
+`cv-ranks` 가 들어간 응답만 골라 달별로 합칩니다 (다른 화면은 `--har-filter view-count` 처럼 지정).
+HAR 파일에도 쿠키가 들어있으니 공유하지 마세요.

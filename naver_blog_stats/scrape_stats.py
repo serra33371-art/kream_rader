@@ -7,6 +7,7 @@
   3. (선택) --sheet-id 를 주면 구글 시트에도 바로 붙여넣음
 """
 import argparse
+import base64
 import csv
 import json
 import re
@@ -21,7 +22,9 @@ import requests
 
 DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 # 이 헤더들은 requests 가 알아서 처리하므로 복사본에서 제외
-SKIP_HEADERS = {'content-length', 'accept-encoding', 'host'}
+SKIP_HEADERS = {'content-length', 'accept-encoding', 'host',
+                # 캐시 헤더가 있으면 서버가 304(빈 응답)를 돌려준다
+                'if-none-match', 'if-modified-since'}
 
 
 def parse_curl(text):
@@ -161,23 +164,7 @@ def upload_to_sheet(rows, columns, sheet_id, worksheet, creds_path):
     print(f'구글 시트 "{worksheet}" 탭에 {len(rows)}행 업로드 완료')
 
 
-def main():
-    p = argparse.ArgumentParser(description='네이버 블로그 통계 스크래퍼')
-    p.add_argument('--curl', default='curl.txt', help='Copy as cURL(bash) 내용을 저장한 파일')
-    p.add_argument('--start', help='시작일 YYYY-MM-DD (생략하면 복사한 URL 그대로 1번만 호출)')
-    p.add_argument('--end', help='종료일 YYYY-MM-DD (기본: 어제)')
-    p.add_argument('--start-key', help='시작일 파라미터 이름 (예: startDate). 생략 시 자동 감지')
-    p.add_argument('--end-key', help='종료일 파라미터 이름 (예: endDate)')
-    p.add_argument('--step', choices=['day', 'month'], default='day',
-                   help='day: 하루씩 / month: 매월 1일로 (조회수 순위 같은 월간 화면)')
-    p.add_argument('--out', default='blog_stats.csv', help='저장할 CSV 경로')
-    p.add_argument('--dump', action='store_true', help='원본 JSON 을 raw/ 폴더에 저장 (구조 확인용)')
-    p.add_argument('--delay', type=float, default=1.0, help='요청 간 대기(초)')
-    p.add_argument('--sheet-id', help='구글 시트 ID (URL 의 /d/<ID>/edit 부분)')
-    p.add_argument('--worksheet', default='blog_stats', help='구글 시트 탭 이름')
-    p.add_argument('--creds', default='service_account.json', help='구글 서비스계정 키 파일')
-    args = p.parse_args()
-
+def iter_curl(args):
     url, headers, cookies = parse_curl(Path(args.curl).read_text(encoding='utf-8'))
     session = requests.Session()
     session.headers.update(headers)
@@ -192,18 +179,73 @@ def main():
         targets = [('', url)]
 
     channel_id = dict(parse_qsl(urlsplit(url).query)).get('channelId')
-    all_rows = []
-    for label, target in targets:
+    for n, (label, target) in enumerate(targets):
+        if n:
+            time.sleep(args.delay)
         resp = session.get(target, timeout=20)
         if resp.status_code in (401, 403):
-            sys.exit(f'[{resp.status_code}] 인증 실패 - 쿠키가 만료됐습니다. 개발자도구에서 cURL 을 다시 복사하세요.')
+            sys.exit(f'[{resp.status_code}] 인증 실패 - 쿠키가 만료됐거나 서명(x-ca-sig)이 막혔습니다.\n'
+                     '개발자도구에서 cURL 을 다시 복사하거나, HAR 방식(--har)을 쓰세요.')
         resp.raise_for_status()
         try:
             data = resp.json()
         except ValueError:
             sys.exit('JSON 이 아닌 응답입니다. Fetch/XHR 요청(api 주소)을 복사했는지 확인하세요.\n'
                      + resp.text[:300])
+        yield label, channel_id, data
 
+
+def iter_har(path, url_filter):
+    """개발자도구 Network > 'Export HAR' 로 저장한 파일에서 응답을 꺼낸다.
+
+    화면에서 월/날짜를 넘겨가며 찍힌 요청을 그대로 쓰므로 서명·쿠키 문제가 없다.
+    """
+    har = json.loads(Path(path).read_text(encoding='utf-8'))
+    seen = set()
+    for entry in har['log']['entries']:
+        req_url = entry['request']['url']
+        if url_filter not in req_url:
+            continue
+        content = entry['response'].get('content', {})
+        text = content.get('text')
+        if not text:
+            continue  # 304 등 본문 없는 응답 (Disable cache 체크 필요)
+        if content.get('encoding') == 'base64':
+            text = base64.b64decode(text).decode('utf-8')
+        params = dict(parse_qsl(urlsplit(req_url).query))
+        label = params.get('date') or params.get('startDate') or ''
+        if label in seen:
+            continue
+        seen.add(label)
+        yield label, params.get('channelId'), json.loads(text)
+
+
+def main():
+    p = argparse.ArgumentParser(description='네이버 블로그 통계 스크래퍼')
+    p.add_argument('--curl', default='curl.txt', help='Copy as cURL(bash) 내용을 저장한 파일')
+    p.add_argument('--har', help='curl 대신 개발자도구에서 저장한 .har 파일 사용')
+    p.add_argument('--har-filter', default='cv-ranks', help='HAR 에서 골라낼 요청 주소 일부')
+    p.add_argument('--start', help='시작일 YYYY-MM-DD (생략하면 복사한 URL 그대로 1번만 호출)')
+    p.add_argument('--end', help='종료일 YYYY-MM-DD (기본: 어제)')
+    p.add_argument('--start-key', help='시작일 파라미터 이름 (예: startDate). 생략 시 자동 감지')
+    p.add_argument('--end-key', help='종료일 파라미터 이름 (예: endDate)')
+    p.add_argument('--step', choices=['day', 'month'], default='day',
+                   help='day: 하루씩 / month: 매월 1일로 (조회수 순위 같은 월간 화면)')
+    p.add_argument('--out', default='blog_stats.csv', help='저장할 CSV 경로')
+    p.add_argument('--dump', action='store_true', help='원본 JSON 을 raw/ 폴더에 저장 (구조 확인용)')
+    p.add_argument('--delay', type=float, default=1.0, help='요청 간 대기(초)')
+    p.add_argument('--sheet-id', help='구글 시트 ID (URL 의 /d/<ID>/edit 부분)')
+    p.add_argument('--worksheet', default='blog_stats', help='구글 시트 탭 이름')
+    p.add_argument('--creds', default='service_account.json', help='구글 서비스계정 키 파일')
+    args = p.parse_args()
+
+    if args.har:
+        source = iter_har(args.har, args.har_filter)
+    else:
+        source = iter_curl(args)
+
+    all_rows = []
+    for label, channel_id, data in source:
         if args.dump:
             Path('raw').mkdir(exist_ok=True)
             name = label or datetime.now().strftime('%Y%m%d_%H%M%S')
@@ -217,8 +259,6 @@ def main():
                 r = {'request_date': label, **r}
             all_rows.append(r)
         print(f'{label or "요청"}: {len(rows)}행')
-        if len(targets) > 1:
-            time.sleep(args.delay)
 
     if not all_rows:
         sys.exit('가져온 데이터가 없습니다. --dump 로 원본 JSON 을 확인하세요.')

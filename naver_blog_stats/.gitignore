@@ -2,3 +2,4 @@ curl.txt
 service_account.json
 raw/
 *.csv
+*.har
