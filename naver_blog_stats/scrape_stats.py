@@ -20,6 +20,14 @@ from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import requests
 
+try:
+    # 회사망처럼 보안 프로그램이 HTTPS 를 검사하는 환경에서는 윈도우 인증서 저장소를
+    # 써야 SSL 오류(CERTIFICATE_VERIFY_FAILED)가 안 난다. (pip install truststore)
+    import truststore
+    truststore.inject_into_ssl()
+except ImportError:
+    pass
+
 DATE_RE = re.compile(r'^\d{4}-\d{2}-\d{2}$')
 # 이 헤더들은 requests 가 알아서 처리하므로 복사본에서 제외
 SKIP_HEADERS = {'content-length', 'accept-encoding', 'host',
