@@ -157,6 +157,35 @@ def daterange(start, end, step='day'):
         d += timedelta(days=1)
 
 
+def write_xlsx(rows, columns, path):
+    """'전체' 시트 + 기간(월)별 시트로 나눠 엑셀 파일 저장."""
+    from openpyxl import Workbook  # pip install openpyxl
+
+    wb = Workbook()
+    groups = {'전체': rows}
+    if '기간' in columns:
+        for r in rows:
+            groups.setdefault(str(r['기간']), []).append(r)
+    for i, (name, group) in enumerate(groups.items()):
+        ws = wb.active if i == 0 else wb.create_sheet()
+        ws.title = re.sub(r'[\\/*?:\[\]]', '_', name)[:31]
+        ws.append(columns)
+        for r in group:
+            ws.append([r.get(c, '') for c in columns])
+        ws.freeze_panes = 'A2'
+        ws.auto_filter.ref = ws.dimensions
+        for col_idx, c in enumerate(columns, 1):
+            width = max([len(str(c))] + [len(str(r.get(c, ''))) for r in group[:200]])
+            ws.column_dimensions[ws.cell(1, col_idx).column_letter].width = min(width + 2, 60)
+            if c == 'link':
+                for row in ws.iter_rows(min_row=2, min_col=col_idx, max_col=col_idx):
+                    if row[0].value:
+                        row[0].hyperlink = row[0].value
+                        row[0].style = 'Hyperlink'
+    wb.save(path)
+    print(f'{path} 저장 완료 (시트 {len(groups)}개: 전체 + 기간별)')
+
+
 def upload_to_sheet(rows, columns, sheet_id, worksheet, creds_path):
     import gspread  # pip install gspread
 
@@ -181,7 +210,7 @@ def iter_curl(args):
     if args.start:
         start = date.fromisoformat(args.start)
         end = date.fromisoformat(args.end) if args.end else date.today() - timedelta(days=1)
-        targets = [(d.isoformat(), with_date(url, d, args.start_key, args.end_key))
+        targets = [(d.isoformat()[:7] if args.step == 'month' else d.isoformat(), with_date(url, d, args.start_key, args.end_key))
                    for d in daterange(start, end, args.step)]
     else:
         targets = [('', url)]
@@ -223,7 +252,9 @@ def iter_har(path, url_filter):
         params = dict(parse_qsl(urlsplit(req_url).query))
         label = params.get('date') or params.get('startDate') or ''
         interval = params.get('interval')
-        if interval and interval != 'month':
+        if interval == 'month' and label:
+            label = label[:7]  # 2025-09-01 -> 2025-09
+        elif interval:
             label = f'{label} ({interval})'  # 일간/주간 조회분은 월간과 구분
         if label in seen:
             continue
@@ -243,6 +274,7 @@ def main():
     p.add_argument('--step', choices=['day', 'month'], default='day',
                    help='day: 하루씩 / month: 매월 1일로 (조회수 순위 같은 월간 화면)')
     p.add_argument('--out', default='blog_stats.csv', help='저장할 CSV 경로')
+    p.add_argument('--xlsx', help='엑셀 파일로도 저장 (전체 + 월별 시트). 예: cv_ranks.xlsx')
     p.add_argument('--dump', action='store_true', help='원본 JSON 을 raw/ 폴더에 저장 (구조 확인용)')
     p.add_argument('--delay', type=float, default=1.0, help='요청 간 대기(초)')
     p.add_argument('--sheet-id', help='구글 시트 ID (URL 의 /d/<ID>/edit 부분)')
@@ -267,7 +299,7 @@ def main():
         for r in rows:
             r = add_blog_link(r, channel_id)
             if label:
-                r = {'request_date': label, **r}
+                r = {'기간': label, **r}
             all_rows.append(r)
         print(f'{label or "요청"}: {len(rows)}행')
 
@@ -286,6 +318,9 @@ def main():
         w.writeheader()
         w.writerows(all_rows)
     print(f'{args.out} 저장 완료 ({len(all_rows)}행, {len(columns)}열)')
+
+    if args.xlsx:
+        write_xlsx(all_rows, columns, args.xlsx)
 
     if args.sheet_id:
         upload_to_sheet(all_rows, columns, args.sheet_id, args.worksheet, args.creds)
